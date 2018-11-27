@@ -4,6 +4,9 @@ import autobind from 'class-autobind'
 import * as d3 from 'd3'
 import D3Container from './d3container'
 import Amazons from './amazons'
+import RandomPlay from './random_play'
+import MinMax from './minmax';
+import MCTS from './mcts'
 
 export default class UI extends Component {
 
@@ -14,7 +17,11 @@ export default class UI extends Component {
         this.state = {
             amazons_state: undefined,
             destination_moves: [],
-            cross_moves: []
+            cross_moves: [],
+            transition_time: 300,
+            //ai: new RandomPlay()
+            min_max_ai: new MinMax(5),
+            mcts_ai: new MCTS(1000)
         };
     }
 
@@ -25,26 +32,14 @@ export default class UI extends Component {
     componentDidMount() {
         this.createBoard();
         this.renderBoard();
-
-        console.log(Amazons.listMoves(this.state.amazons_state));
     }
 
     initialize() {
-        // let initial_state = Amazons.build_initial_state();
-
         this.setState({ amazons_state: Amazons.build_initial_state() });
     }
 
     reset() {
     }
-
-    // createEmptyColorMask(size) {
-    //     let empty_mask = [];
-    //     for (let i = 0; i < size; ++i) {
-    //         empty_mask.push('none');
-    //     }
-    //     return empty_mask;
-    // }
 
     createBoard() {
 
@@ -82,8 +77,8 @@ export default class UI extends Component {
 
         g.append('rect')
             .attr('class', 'moving_cross')
-            .attr('height', this.cell_size)
-            .attr('width', this.cell_size)
+            .attr('width', this.x_scale(1))
+            .attr('height', this.y_scale(1))
             .style('stroke', 'grey')
             .style('fill', 'grey')
             .style('opacity', 0.0);
@@ -105,28 +100,73 @@ export default class UI extends Component {
             .attr('width', this.x_scale(1))
             .attr('height', this.y_scale(1))
             .style('stroke', 'grey')
-            .merge(grid)
-            .style('fill', d => d === Amazons.cross ? 'grey' : 'none');
+            .style('fill', 'none');
 
         grid.exit().remove();
 
-        // create a grid to show all positions on the board
-        let pieces = g.selectAll('.piece').data(this.state.amazons_state.player_piece_indices[Amazons.leftPlayer]);
+        let walls = g.selectAll('.wall').data(this.state.amazons_state.board);
 
-        pieces.enter().append('circle')
-            .attr('class', 'piece')
+        walls.enter().append('rect')
+            .attr('class', 'wall')
+            .attr('x', (d, i) => this.x_scale(Amazons.convertIndexToXY(i).x))
+            .attr('y', (d, i) => this.y_scale(Amazons.convertIndexToXY(i).y))
+            .attr('width', this.x_scale(1))
+            .attr('height', this.y_scale(1))
+            .style('stroke', 'grey')
+            .style('opacity', d => d === Amazons.cross ? 1.0 : 0.0)
+            .style('fill', 'grey');
+
+        walls.transition()
+            .duration(1000)
+            .style('opacity', d => d === Amazons.cross ? 1.0 : 0.0);
+
+        walls.exit().remove();
+
+        let left_pieces = g.selectAll('.left_piece').data(this.state.amazons_state.player_piece_indices[Amazons.leftPlayer]);
+
+        left_pieces.enter().append('circle')
+            .attr('class', 'left_piece')
             .attr('r', this.cell_size / 4.0)
             .style('stroke', 'grey')
             .style('fill', 'grey')
-            .merge(pieces)
-            .attr('cx', d => this.x_scale(Amazons.convertIndexToXY(d).x) + this.cell_size / 2.0)
-            .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.cell_size / 2.0)
-            .on('click', d => {
-                this.setState({ destination_moves: [], cross_moves: [] });
-                this.setState({ destination_moves: Amazons.listDestinationMovesForPiece(this.state.amazons_state, d) });
+            .attr('cx', d => this.x_scale(Amazons.convertIndexToXY(d).x) + this.x_scale(1) / 2.0)
+            .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0)
+            .on('click', function(d) {
+                if (self.state.amazons_state.player === Amazons.leftPlayer) {
+                    self.setState({ destination_moves: [], cross_moves: [] });
+                    self.setState({ destination_moves: Amazons.listDestinationMovesForPiece(self.state.amazons_state, d) });
+                }
             });
 
-        pieces.exit().remove();
+        left_pieces.transition()
+            .duration(this.state.transition_time)
+            .attr('cx', d => this.x_scale(Amazons.convertIndexToXY(d).x) + this.x_scale(1) / 2.0)
+            .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0);
+
+        left_pieces.exit().remove();
+
+        let right_pieces = g.selectAll('.right_piece').data(this.state.amazons_state.player_piece_indices[Amazons.rightPlayer]);
+
+        right_pieces.enter().append('circle')
+            .attr('class', 'right_piece')
+            .attr('r', this.cell_size / 4.0)
+            .style('stroke', 'grey')
+            .style('fill', 'white')
+            .attr('cx', d => this.x_scale(Amazons.convertIndexToXY(d).x) + this.x_scale(1) / 2.0)
+            .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0)
+            .on('click', function(d) {
+                // if (self.state.amazons_state.player === Amazons.rightPlayer) {
+                //     self.setState({ destination_moves: [], cross_moves: [] });
+                //     self.setState({ destination_moves: Amazons.listDestinationMovesForPiece(self.state.amazons_state, d) });
+                // }
+            });
+
+        right_pieces.transition()
+            .duration(this.state.transition_time)
+            .attr('cx', d => this.x_scale(Amazons.convertIndexToXY(d).x) + this.x_scale(1) / 2.0)
+            .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0);
+
+        right_pieces.exit().remove();
 
         let destinations = g.selectAll('.destination').data(this.state.destination_moves);
 
@@ -138,12 +178,13 @@ export default class UI extends Component {
             .attr('height', this.y_scale(1))
             .style('stroke', 'grey')
             .style('fill', 'grey')
-            .style('opacity', 0.1)
+            .style('opacity', 0.2)
             .on('mouseover', function(d) {
                 g.select('.moving_piece')
                     .style('opacity', 1.0)
-                    .attr('cx', self.x_scale(d.destination_x) + self.cell_size / 2.0)
-                    .attr('cy', self.y_scale(d.destination_y) + self.cell_size / 2.0);
+                    .style('fill', d => self.state.amazons_state.player === Amazons.leftPlayer ? 'grey' : 'white')
+                    .attr('cx', self.x_scale(d.destination_x) + self.x_scale(1) / 2.0)
+                    .attr('cy', self.y_scale(d.destination_y) + self.y_scale(1) / 2.0);
             })
             .on('mouseout', function(d) {
                 if (self.state.cross_moves.length === 0) {
@@ -171,7 +212,7 @@ export default class UI extends Component {
             .attr('height', this.y_scale(1))
             .style('stroke', 'grey')
             .style('fill', 'grey')
-            .style('opacity', 0.1)
+            .style('opacity', 0.2)
             .on('mouseover', function(d) {
                 g.select('.moving_cross')
                     .style('opacity', 1.0)
@@ -183,11 +224,26 @@ export default class UI extends Component {
                     .style('opacity', 0);
             })
             .on('click', function(d) {
-                console.log(d);
                 let new_amazons_state = Amazons.applyMove(self.state.amazons_state, d);
-                self.setState( { destination_moves: [], cross_moves: [] });
-                self.setState( { amazons_state: new_amazons_state } );
-                console.log(new_amazons_state);
+                self.setState( {
+                    destination_moves: [],
+                    cross_moves: [],
+                    amazons_state: new_amazons_state
+                });
+
+                setTimeout(function() {
+                    let ai_moved_amazons_state = self.state.min_max_ai.compute(new_amazons_state);
+
+                    if (ai_moved_amazons_state === null) {
+                        ai_moved_amazons_state = self.state.mcts_ai.compute(new_amazons_state);
+                    } else {
+                        console.log('used min max');
+                    }
+
+                    self.setState( {
+                        amazons_state: ai_moved_amazons_state
+                    });
+                }, 1000);
             });
 
         crosses.exit().remove();
