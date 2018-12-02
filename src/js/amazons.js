@@ -68,44 +68,47 @@ export default class Amazons {
     }
 
     static get width() {
-        return 5;
+        return 10;
     }
 
     static get height() {
-        return 5;
+        return 10;
     }
 
     static build_initial_state() {
-        // let initial_board = [
-        //     0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
-        //     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        //     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        //     1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        //     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        //     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        //     2, 0, 0, 0, 0, 0, 0, 0, 0, 2,
-        //     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        //     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        //     0, 0, 0, 2, 0, 0, 2, 0, 0, 0
-        // ];
+        let initial_board = [
+            0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            2, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 2, 0, 0, 2, 0, 0, 0
+        ];
 
         // let initial_board = [
-        //     0, 0,
-        //     1, 0
-        // ];
-
-        // let initial_board = [
-        //     2, 3, 0, 0, 1,
-        //     0, 0, 0, 3, 3
+        //     1, 3, 0, 2,
+        //     0, 0, 0, 3
         // ]
 
-        let initial_board = [
-            2, 3, 0, 0, 0,
-            0, 0, 0, 3, 0,
-            0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0,
-            0, 0, 0, 0, 1
-        ]
+        // Shows optimal play instead of scope function
+        // let initial_board = [
+        //     3, 0, 3,
+        //     2, 3, 0,
+        //     3, 0, 3,
+        //     1, 3, 3
+        // ]
+
+        // let initial_board = [
+        //     2, 3, 0, 0, 0,
+        //     0, 0, 0, 3, 0,
+        //     0, 0, 0, 0, 0,
+        //     0, 0, 0, 0, 0,
+        //     0, 0, 0, 0, 1
+        // ]
 
         let left_player_piece_indices = [];
         let right_player_piece_indices = [];
@@ -124,9 +127,9 @@ export default class Amazons {
                                 right_player_piece_indices);
     }
 
-    static applyMove(amazons_state, move) {
+    static applyMove(amazons_state, move, dont_duplicate = true) {
 
-        let new_amazons_state = amazons_state.duplicate();
+        let new_amazons_state = dont_duplicate === true ? amazons_state.duplicate() : amazons_state;
 
         let source_index = Amazons.convertXYToIndex(move.source_x, move.source_y);
         let destination_index = Amazons.convertXYToIndex(move.destination_x, move.destination_y);
@@ -144,57 +147,86 @@ export default class Amazons {
         return new_amazons_state;
     }
 
-    static stateValue(state, player, depth) {
-
-        let moves = this.listMoves(state);
-
-        if (moves.length === 0) {
-            if (state.player === player) {
-                return 0.0;
-            } else {
-                return 1.0;
-            }
+    static stateValue(state, player, depth, moves) {
+        if (moves === undefined) {
+            moves = Amazons.listMoves(state);
         }
-
+        if (moves.length === 0) {
+            return state.player === player ? 0.0 : 1.0;
+        }
         return null;
     }
 
-    static simulationPolicy(state) {
-        let moves = Amazons.listMoves(state);
+    static simulationUsingRandom(state, moves) {
+        if (moves === undefined) {
+            moves = Amazons.listMoves(state);
+        }
 
         let random_index = Utility.getRandomInt(0, moves.length - 1);
-
-        return Amazons.applyMove(state, moves[random_index]);
+        return Amazons.applyMove(state, moves[random_index], true);
     }
 
-    static listMoves(amazons_state) {
+    static simulationUsingScope(state, moves, dont_duplicate = true) {
+        if (moves === undefined) {
+            moves = Amazons.listMoves(state);
+        }
 
+        let scopes = [];
+        let max_player_scope = 0;
+        for (let i = 0; i < moves.length; ++i) {
+            let new_state = Amazons.applyMove(state, moves[i]);
+            let scope = {
+                player_scope: Amazons.listMoves(new_state, state.player, true).length,
+                opponent_scope: Amazons.listMoves(new_state, Amazons.opponent(state.player), true).length
+            };
+
+            if (max_player_scope < scope.player_scope) {
+                max_player_scope = scope.player_scope;
+            }
+            scopes.push(scope);
+        }
+
+        let min_opponent_scope = Number.MAX_SAFE_INTEGER;
+        let index = 0;
+        for (let i = 0; i < scopes.length; ++i) {
+            if (scopes[i].player_scope === max_player_scope) {
+                if (min_opponent_scope > scopes[i].opponent_scope) {
+                    min_opponent_scope = scopes[i].opponent_scope;
+                    index = i;
+                }
+            }
+        }
+
+        return Amazons.applyMove(state, moves[index], dont_duplicate);
+    }
+
+    static hasLost(amazons_state, player) {
+        let moves = this.listMoves(amazons_state, player);
+        return moves.length === 0;
+    }
+
+    static listMoves(amazons_state, player, only_destination = false) {
+        if (player === undefined) {
+            player = amazons_state.player;
+        }
         let moves = [];
-
-        amazons_state.player_piece_indices[amazons_state.player].forEach(i => {
-            this.pieceQueenMoves(amazons_state, i, moves);
+        amazons_state.player_piece_indices[player].forEach(i => {
+            this.pieceQueenMoves(amazons_state, i, moves, only_destination);
         });
-
         return moves;
     }
 
     static listDestinationMovesForPiece(amazons_state, source_index) {
-
         let moves = [];
-
         this.pieceQueenMoves(amazons_state, source_index, moves, true);
-
         return moves;
     }
 
     static listCrossMovesForPiece(amazons_state, source_index, destination_index) {
-
         let moves = [];
-
         amazons_state.board[source_index] = Amazons.blank;
         Amazons.crossQueenMoves(amazons_state, source_index, destination_index, moves);
         amazons_state.board[source_index] = amazons_state.player;
-
         return moves;
     }
 
@@ -249,14 +281,11 @@ export default class Amazons {
     }
 
     static queenMoves(amazons_state, x, y, x_change, y_change, next_func) {
-
         while (true) {
             let index = this.convertXYToIndex(x = x_change(x), y = y_change(y));
-
             if (!this.insideBoard(x, y) || amazons_state.board[index] !== Amazons.blank) {
                 break;
             }
-
             next_func(index);
         }
     }

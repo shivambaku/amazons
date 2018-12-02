@@ -31,6 +31,8 @@ The ai returns the optimal solution if it finds in under that height, otherwise 
 If alpha-beta pruning returns null then I go on with monte carlo tree search.
 Also alpha-beta pruning is a breadth-first search that checks every posibilities, so it is
 gauranteed to find the solution.
+Note the height in alpha-beta pruning is not the same as the one defined in class; however,
+alpha-beta pruning height will never underestimate the actual height.
 
 Number of sum of games is shown in a text form, each time the games splits into more games,
 the number increments.

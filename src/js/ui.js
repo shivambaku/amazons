@@ -1,11 +1,12 @@
 import React, { Component } from 'react';
-//import { Dropdown, DropdownToggle, DropdownMenu, DropdownItem, Button } from 'reactstrap';
+import { Dropdown, DropdownToggle, DropdownMenu, DropdownItem, Button } from 'reactstrap';
 import autobind from 'class-autobind'
 import * as d3 from 'd3'
 import D3Container from './d3container'
 import Amazons from './amazons'
 import RandomPlay from './random_play'
 import MinMax from './minmax';
+import ScopeAI from './scope_ai'
 import MCTS from './mcts'
 
 export default class UI extends Component {
@@ -19,10 +20,21 @@ export default class UI extends Component {
             destination_moves: [],
             cross_moves: [],
             transition_time: 300,
-            //ai: new RandomPlay()
-            min_max_ai: new MinMax(5),
-            mcts_ai: new MCTS(1000)
+            game_status: 'On Going',
+            left_player_ai_drop_down_open: false,
+            right_player_ai_drop_down_open: false,
+            left_player_ai_name: 'Human',
+            right_player_ai_name: 'MCTS'
         };
+
+        this.ais = {
+            'Human': undefined,
+            'Random Play': new RandomPlay(),
+            'Scope AI': new ScopeAI(),
+            'MCTS': new MCTS(150)
+        };
+
+        this.min_max = new MinMax(5);
     }
 
     componentWillMount() {
@@ -32,13 +44,62 @@ export default class UI extends Component {
     componentDidMount() {
         this.createBoard();
         this.renderBoard();
+        this.createInfoBoard();
+        this.renderInfoBoard();
     }
 
     initialize() {
-        this.setState({ amazons_state: Amazons.build_initial_state() });
+        this.setState({
+            amazons_state: Amazons.build_initial_state(),
+            game_status: 'On Going',
+            destination_moves: [],
+            cross_moves: [],
+        });
     }
 
     reset() {
+        this.initialize();
+
+        let g = d3.select(this.refs.div_board).select('svg').select('#board_group');
+        g.select('.moving_piece').style('opacity', 0);
+    }
+
+    step() {
+
+        if (this.state.game_status !== 'On Going') return;
+
+        let ai = this.state.amazons_state.player === Amazons.leftPlayer ?
+                    this.ais[this.state.left_player_ai_name] :
+                    this.ais[this.state.right_player_ai_name];
+
+        if (ai !== undefined) {
+            let ai_moved_amazons_state = this.min_max.compute(this.state.amazons_state);
+            if (ai_moved_amazons_state === null) {
+                ai_moved_amazons_state = ai.compute(this.state.amazons_state);
+            } else {
+                console.log('used min max');
+            }
+
+            this.setState({
+                amazons_state: ai_moved_amazons_state
+            });
+
+            this.checkWinner(ai_moved_amazons_state);
+        }
+    }
+
+    checkWinner(amazons_state) {
+
+        let l_has_lost = Amazons.hasLost(amazons_state, Amazons.leftPlayer);
+        let r_has_lost = Amazons.hasLost(amazons_state, Amazons.rightPlayer);
+
+        if (l_has_lost === true) {
+            this.setState({  game_status: 'White Won' });
+        }
+
+        if (r_has_lost === true) {
+            this.setState({  game_status: 'Black Won' });
+        }
     }
 
     createBoard() {
@@ -82,6 +143,48 @@ export default class UI extends Component {
             .style('stroke', 'grey')
             .style('fill', 'grey')
             .style('opacity', 0.0);
+    }
+
+    createInfoBoard() {
+        let margin = { top: 10, right: 10, bottom: 10, left: 10 };
+        let padding = { top: 100, right: 100, bottom: 100, left: 100 };
+
+        this.container_info = new D3Container(margin, padding, 500, 500);
+        this.x_scale_info = d3.scaleLinear().domain([0, Amazons.width]).range([0, this.container.width]);
+        this.y_scale_info = d3.scaleLinear().domain([0, Amazons.height]).range([0, this.container.height]);
+
+        let svg = d3.select(this.refs.div_info_board)
+            .append('svg')
+            .attr('width', this.container_info.outer_width)
+            .attr('height', this.container_info.outer_height)
+            .append('g')
+            .attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+        let g = svg.append('g')
+            .attr('id', 'info_group')
+            .attr('transform', `translate(${padding.left}, ${padding.top})`);
+
+        g.append('rect')
+            .attr('width', this.container_info.width)
+            .attr('height', this.container_info.height)
+            .attr('fill', 'lightgrey')
+            .style('opacity', 0.5);
+
+        g.append('text')
+            .attr('class', 'turn_text')
+            .attr('x', this.container_info.width / 2.0)
+            .attr('y', this.container_info.height / 3.0)
+            .attr('text-anchor', 'middle')
+            .attr('alignment-baseline', 'middle')
+            .attr('font-size', '22px');
+
+        g.append('text')
+            .attr('class', 'on_going_text')
+            .attr('x', this.container_info.width / 2.0)
+            .attr('y', this.container_info.height * 2.0 / 3.0)
+            .attr('text-anchor', 'middle')
+            .attr('alignment-baseline', 'middle')
+            .attr('font-size', '22px')
     }
 
     renderBoard() {
@@ -132,7 +235,8 @@ export default class UI extends Component {
             .attr('cx', d => this.x_scale(Amazons.convertIndexToXY(d).x) + this.x_scale(1) / 2.0)
             .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0)
             .on('click', function(d) {
-                if (self.state.amazons_state.player === Amazons.leftPlayer) {
+                if (self.state.amazons_state.player === Amazons.leftPlayer &&
+                    self.state.left_player_ai_name === 'Human') {
                     self.setState({ destination_moves: [], cross_moves: [] });
                     self.setState({ destination_moves: Amazons.listDestinationMovesForPiece(self.state.amazons_state, d) });
                 }
@@ -155,10 +259,11 @@ export default class UI extends Component {
             .attr('cx', d => this.x_scale(Amazons.convertIndexToXY(d).x) + this.x_scale(1) / 2.0)
             .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0)
             .on('click', function(d) {
-                // if (self.state.amazons_state.player === Amazons.rightPlayer) {
-                //     self.setState({ destination_moves: [], cross_moves: [] });
-                //     self.setState({ destination_moves: Amazons.listDestinationMovesForPiece(self.state.amazons_state, d) });
-                // }
+                if (self.state.amazons_state.player === Amazons.rightPlayer &&
+                    self.state.right_player_ai_name === 'Human') {
+                    self.setState({ destination_moves: [], cross_moves: [] });
+                    self.setState({ destination_moves: Amazons.listDestinationMovesForPiece(self.state.amazons_state, d) });
+                }
             });
 
         right_pieces.transition()
@@ -189,7 +294,7 @@ export default class UI extends Component {
             .on('mouseout', function(d) {
                 if (self.state.cross_moves.length === 0) {
                     g.select('.moving_piece')
-                    .style('opacity', 0);
+                        .style('opacity', 0);
                 }
             })
             .on('click', function(d) {
@@ -230,35 +335,99 @@ export default class UI extends Component {
                     cross_moves: [],
                     amazons_state: new_amazons_state
                 });
-
-                setTimeout(function() {
-                    let ai_moved_amazons_state = self.state.min_max_ai.compute(new_amazons_state);
-
-                    if (ai_moved_amazons_state === null) {
-                        ai_moved_amazons_state = self.state.mcts_ai.compute(new_amazons_state);
-                    } else {
-                        console.log('used min max');
-                    }
-
-                    self.setState( {
-                        amazons_state: ai_moved_amazons_state
-                    });
-                }, 1000);
+                self.checkWinner(new_amazons_state);
             });
 
         crosses.exit().remove();
     }
 
-    render() {
+    renderInfoBoard() {
 
+        let g = d3.select(this.refs.div_info_board).select('svg').select('#info_group');
+
+        g.select('.turn_text')
+            .text(this.state.amazons_state.player === Amazons.leftPlayer ? "Black's Turn" : "White's Turn");
+
+        g.select('.on_going_text')
+            .text(this.state.game_status);
+    }
+
+    changeAlgorithm(player, ai_name) {
+        if (player === Amazons.leftPlayer) {
+            this.setState({left_player_ai_name: ai_name});
+        } else {
+            this.setState({right_player_ai_name: ai_name});
+        }
+    }
+
+    toggleLeftPlayerAiDropDown() {
+        this.setState(prevState => ({
+            left_player_ai_drop_down_open: !prevState.left_player_ai_drop_down_open,
+            destination_moves: [],
+            cross_moves: [],
+        }));
+    }
+
+    toggleRightPlayerAiDropDown() {
+        this.setState(prevState => ({
+            right_player_ai_drop_down_open: !prevState.right_player_ai_drop_down_open,
+            destination_moves: [],
+            cross_moves: [],
+        }));
+    }
+
+    render() {
         if (this.container !== undefined) {
             this.renderBoard();
+            this.renderInfoBoard();
         }
+
+        let left_player_options = Object.keys(this.ais).map(ai_name =>
+            <DropdownItem key={ai_name} onClick={() => this.changeAlgorithm(Amazons.leftPlayer, ai_name)}>
+                {ai_name}
+            </DropdownItem>
+        );
+
+        let right_player_options = Object.keys(this.ais).map(ai_name =>
+            <DropdownItem key={ai_name} onClick={() => this.changeAlgorithm(Amazons.rightPlayer, ai_name)}>
+                {ai_name}
+            </DropdownItem>
+        );
 
         return (
             <div>
-                {/* <div> Hello World!</div> */}
-                <div ref='div_board'/>
+                <div ref='div_board' style={{float: 'left'}}/>
+                <div ref='div_info_board'/>
+                <div className='row'>
+                    <Button color='info' className='btn-sm' onClick={this.step}>
+                        step
+                    </Button>
+                    &nbsp;
+                    <Dropdown isOpen={this.state.left_player_ai_drop_down_open}
+                        toggle={this.toggleLeftPlayerAiDropDown}>
+                        <DropdownToggle color="secondary" caret>
+                            {this.state.left_player_ai_name}
+                        </DropdownToggle>
+                        <DropdownMenu>
+                            {left_player_options}
+                        </DropdownMenu>
+                    </Dropdown>
+                    &nbsp;
+                    <Dropdown isOpen={this.state.right_player_ai_drop_down_open}
+                        toggle={this.toggleRightPlayerAiDropDown}>
+                        <DropdownToggle color="secondary" caret>
+                            {this.state.right_player_ai_name}
+                        </DropdownToggle>
+                        <DropdownMenu>
+                            {right_player_options}
+                        </DropdownMenu>
+                    </Dropdown>
+                    &nbsp;
+                    <Button color='warning' className='btn-sm' onClick={this.reset}>
+                        reset
+                    </Button>
+                    &nbsp;
+                </div>
             </div>
         );
     }

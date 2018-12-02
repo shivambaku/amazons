@@ -89,13 +89,15 @@ export default class MCTS {
     }
 
     simulate(root, leaf) {
-        let final_state = leaf.state;
+        let final_state = leaf.state.duplicate();
 
-        let result = Amazons.stateValue(final_state, root.state.player);
+        let moves = Amazons.listMoves(final_state);
+        let result = Amazons.stateValue(final_state, root.state.player, moves);
 
         while (result === null) {
-            final_state = Amazons.simulationPolicy(final_state);
-            result = Amazons.stateValue(final_state, root.state.player);
+            final_state = Amazons.simulationUsingRandom(final_state, moves);
+            moves = Amazons.listMoves(final_state);
+            result = Amazons.stateValue(final_state, root.state.player, moves);
         }
 
         return result;
