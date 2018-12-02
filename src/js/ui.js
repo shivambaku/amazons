@@ -21,17 +21,18 @@ export default class UI extends Component {
             cross_moves: [],
             transition_time: 300,
             game_status: 'On Going',
+            sum_of_games_count: 1,
             left_player_ai_drop_down_open: false,
             right_player_ai_drop_down_open: false,
             left_player_ai_name: 'Human',
-            right_player_ai_name: 'MCTS'
+            right_player_ai_name: 'Scope AI',
         };
 
         this.ais = {
             'Human': undefined,
             'Random Play': new RandomPlay(),
             'Scope AI': new ScopeAI(),
-            'MCTS': new MCTS(150)
+            'MCTS': new MCTS(100)
         };
 
         this.min_max = new MinMax(5);
@@ -54,6 +55,7 @@ export default class UI extends Component {
             game_status: 'On Going',
             destination_moves: [],
             cross_moves: [],
+            sum_of_games_count: 1
         });
     }
 
@@ -73,7 +75,7 @@ export default class UI extends Component {
                     this.ais[this.state.right_player_ai_name];
 
         if (ai !== undefined) {
-            let ai_moved_amazons_state = this.min_max.compute(this.state.amazons_state);
+            let ai_moved_amazons_state = null;//this.min_max.compute(this.state.amazons_state);
             if (ai_moved_amazons_state === null) {
                 ai_moved_amazons_state = ai.compute(this.state.amazons_state);
             } else {
@@ -85,6 +87,7 @@ export default class UI extends Component {
             });
 
             this.checkWinner(ai_moved_amazons_state);
+            this.calculateSumOfGamesCount(ai_moved_amazons_state);
         }
     }
 
@@ -94,12 +97,17 @@ export default class UI extends Component {
         let r_has_lost = Amazons.hasLost(amazons_state, Amazons.rightPlayer);
 
         if (l_has_lost === true) {
-            this.setState({  game_status: 'White Won' });
+            this.setState({ game_status: 'White Won' });
         }
 
         if (r_has_lost === true) {
-            this.setState({  game_status: 'Black Won' });
+            this.setState({ game_status: 'Black Won' });
         }
+    }
+
+    calculateSumOfGamesCount(amazons_state) {
+        let sum_of_games_count = Amazons.sumOfGamesCount(amazons_state);
+        this.setState({ sum_of_games_count: sum_of_games_count });
     }
 
     createBoard() {
@@ -173,7 +181,7 @@ export default class UI extends Component {
         g.append('text')
             .attr('class', 'turn_text')
             .attr('x', this.container_info.width / 2.0)
-            .attr('y', this.container_info.height / 3.0)
+            .attr('y', this.container_info.height * 1.0 / 4.0)
             .attr('text-anchor', 'middle')
             .attr('alignment-baseline', 'middle')
             .attr('font-size', '22px');
@@ -181,7 +189,15 @@ export default class UI extends Component {
         g.append('text')
             .attr('class', 'on_going_text')
             .attr('x', this.container_info.width / 2.0)
-            .attr('y', this.container_info.height * 2.0 / 3.0)
+            .attr('y', this.container_info.height * 2.0 / 4.0)
+            .attr('text-anchor', 'middle')
+            .attr('alignment-baseline', 'middle')
+            .attr('font-size', '22px')
+
+        g.append('text')
+            .attr('class', 'sum_of_games_text')
+            .attr('x', this.container_info.width / 2.0)
+            .attr('y', this.container_info.height * 3.0 / 4.0)
             .attr('text-anchor', 'middle')
             .attr('alignment-baseline', 'middle')
             .attr('font-size', '22px')
@@ -236,7 +252,8 @@ export default class UI extends Component {
             .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0)
             .on('click', function(d) {
                 if (self.state.amazons_state.player === Amazons.leftPlayer &&
-                    self.state.left_player_ai_name === 'Human') {
+                    self.state.left_player_ai_name === 'Human' &&
+                    self.state.game_status === 'On Going') {
                     self.setState({ destination_moves: [], cross_moves: [] });
                     self.setState({ destination_moves: Amazons.listDestinationMovesForPiece(self.state.amazons_state, d) });
                 }
@@ -260,7 +277,8 @@ export default class UI extends Component {
             .attr('cy', d => this.y_scale(Amazons.convertIndexToXY(d).y) + this.y_scale(1) / 2.0)
             .on('click', function(d) {
                 if (self.state.amazons_state.player === Amazons.rightPlayer &&
-                    self.state.right_player_ai_name === 'Human') {
+                    self.state.right_player_ai_name === 'Human' &&
+                    self.state.game_status === 'On Going') {
                     self.setState({ destination_moves: [], cross_moves: [] });
                     self.setState({ destination_moves: Amazons.listDestinationMovesForPiece(self.state.amazons_state, d) });
                 }
@@ -336,6 +354,7 @@ export default class UI extends Component {
                     amazons_state: new_amazons_state
                 });
                 self.checkWinner(new_amazons_state);
+                self.calculateSumOfGamesCount(new_amazons_state);
             });
 
         crosses.exit().remove();
@@ -350,6 +369,9 @@ export default class UI extends Component {
 
         g.select('.on_going_text')
             .text(this.state.game_status);
+
+        g.select('.sum_of_games_text')
+            .text(`Sum of games: ${this.state.sum_of_games_count}`);
     }
 
     changeAlgorithm(player, ai_name) {
@@ -358,6 +380,9 @@ export default class UI extends Component {
         } else {
             this.setState({right_player_ai_name: ai_name});
         }
+
+        let g = d3.select(this.refs.div_board).select('svg').select('#board_group');
+        g.select('.moving_piece').style('opacity', 0);
     }
 
     toggleLeftPlayerAiDropDown() {

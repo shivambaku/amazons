@@ -127,9 +127,9 @@ export default class Amazons {
                                 right_player_piece_indices);
     }
 
-    static applyMove(amazons_state, move, dont_duplicate = true) {
+    static applyMove(amazons_state, move, duplicate = true) {
 
-        let new_amazons_state = dont_duplicate === true ? amazons_state.duplicate() : amazons_state;
+        let new_amazons_state = duplicate === true ? amazons_state.duplicate() : amazons_state;
 
         let source_index = Amazons.convertXYToIndex(move.source_x, move.source_y);
         let destination_index = Amazons.convertXYToIndex(move.destination_x, move.destination_y);
@@ -157,16 +157,16 @@ export default class Amazons {
         return null;
     }
 
-    static simulationUsingRandom(state, moves) {
+    static simulationUsingRandom(state, moves, duplicate = true) {
         if (moves === undefined) {
             moves = Amazons.listMoves(state);
         }
 
         let random_index = Utility.getRandomInt(0, moves.length - 1);
-        return Amazons.applyMove(state, moves[random_index], true);
+        return Amazons.applyMove(state, moves[random_index], duplicate);
     }
 
-    static simulationUsingScope(state, moves, dont_duplicate = true) {
+    static simulationUsingScope(state, moves, duplicate = true) {
         if (moves === undefined) {
             moves = Amazons.listMoves(state);
         }
@@ -197,7 +197,7 @@ export default class Amazons {
             }
         }
 
-        return Amazons.applyMove(state, moves[index], dont_duplicate);
+        return Amazons.applyMove(state, moves[index], duplicate);
     }
 
     static hasLost(amazons_state, player) {
@@ -287,6 +287,77 @@ export default class Amazons {
                 break;
             }
             next_func(index);
+        }
+    }
+
+    static sumOfGamesCount(amazons_state) {
+        let counter = 0;
+
+        let mask = [];
+        for (let i = 0; i < amazons_state.board.length; ++i) {
+            mask.push(0);
+        }
+
+        let left_player_indices = amazons_state.player_piece_indices[Amazons.leftPlayer];
+        let right_player_indices = amazons_state.player_piece_indices[Amazons.rightPlayer];
+
+        counter += this.sumOfGamesCountFromPlayerIndices(amazons_state, mask, left_player_indices);
+        counter += this.sumOfGamesCountFromPlayerIndices(amazons_state, mask, right_player_indices);
+
+        console.log(mask);
+
+        return counter;
+    }
+
+    static sumOfGamesCountFromPlayerIndices(amazons_state, mask, player_indices) {
+        let counter = 0;
+        for (let i = 0; i < player_indices.length; ++i) {
+            let index = player_indices[i];
+            if (mask[index] === 0) {
+                let filled_with_pieces = this.dijkstra(amazons_state, mask, index, counter + 1);
+                if (!filled_with_pieces) {
+                    counter += 1;
+                }
+            }
+        }
+        return counter;
+    }
+
+    static dijkstra(amazons_state, mask, index, counter) {
+        let squares_covered = 0;
+        let number_of_pieces = 0;
+        let queue = [index];
+
+        while (queue.length !== 0) {
+            index = queue.shift();
+            mask[index] = counter;
+            squares_covered += 1;
+            if (amazons_state.board[index] !== 0) {
+                number_of_pieces +=1;
+            }
+            this.addNeighborsQueue(amazons_state, queue, mask, index);
+        }
+        // filled with pieces
+        return squares_covered === number_of_pieces;
+    }
+
+    static addNeighborsQueue(amazons_state, queue, mask, index) {
+        let point = this.convertIndexToXY(index);
+
+        let x_offset = [1, -1, 0, 0, 1, 1, -1, -1];
+        let y_offset = [0, 0, 1, -1, 1, -1, 1, -1];
+
+        for (let i = 0; i < x_offset.length; ++i) {
+            let x = point.x + x_offset[i];
+            let y = point.y + y_offset[i];
+
+            index = this.convertXYToIndex(x, y);
+
+            if (amazons_state.board[index] !== Amazons.cross &&
+                this.insideBoard(x, y) &&
+                mask[index] === 0) {
+                queue.push(index);
+            }
         }
     }
 }

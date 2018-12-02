@@ -95,7 +95,7 @@ export default class MCTS {
         let result = Amazons.stateValue(final_state, root.state.player, moves);
 
         while (result === null) {
-            final_state = Amazons.simulationUsingRandom(final_state, moves);
+            final_state = Amazons.simulationUsingRandom(final_state, moves, false);
             moves = Amazons.listMoves(final_state);
             result = Amazons.stateValue(final_state, root.state.player, moves);
         }
